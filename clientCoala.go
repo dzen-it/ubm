@@ -20,12 +20,11 @@ func NewClientCoala(host string) Client {
 	if err != nil {
 		panic(err)
 	}
-	c := Client{
-		client: clientCoala{
-			coala: coalago.NewListen(0),
-			host:  addr,
-		},
-	}
+
+	c := newClient(clientCoala{
+		coala: coalago.NewListen(0),
+		host:  addr,
+	})
 
 	return c
 }
