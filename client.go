@@ -51,10 +51,10 @@ func (c Client) SetTrigger(id string, enableAction string, disableAction string)
 	c.triggers.Store(id, trgr)
 }
 
-// IsTriggerBlocked checks the action "Is it blocked by a trigger?"
+// TriggerStatus checks the action "Is it blocked by a trigger?"
 // If blocked, then returns True.
 // To unlock the required to be added the disableAction.
-func (c *Client) IsTriggerBlocked(id string, action string) bool {
+func (c *Client) TriggerStatus(id string, action string) bool {
 	t, ok := c.triggers.Load(id)
 	if ok {
 		trgr := t.(*trigger)
