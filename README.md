@@ -61,7 +61,7 @@ Manage action states using triggers.
 
 ```go
 // Sets a enabling action-1 and a disabling action-2
-client.SetTrigger("user_id", "action-1", "action-2")
+client.SetTrigger("action-1", "action-2", time.Second*0)
 
 fmt.Println("action-1 is blocked:", client.TriggerStatus("user_id", "action-1"))
 // Display: "action-1 is blocked: true"
