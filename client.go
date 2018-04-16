@@ -1,6 +1,11 @@
 package ubm
 
-import "sync"
+import (
+	"sync"
+	"time"
+
+	"github.com/patrickmn/go-cache"
+)
 
 type commander interface {
 	AddAction(id string, action string) error
@@ -10,14 +15,18 @@ type commander interface {
 
 // Client implements the wrapper over the concrete transport API
 type Client struct {
-	client   commander
-	triggers *sync.Map
+	client                 commander
+	globalDisabledTriggers *sync.Map
+	globalEnabledTriggers  *sync.Map
+	globalTriggersCache    *cache.Cache
 }
 
 func newClient(cmndr commander) Client {
 	c := Client{
-		client:   cmndr,
-		triggers: new(sync.Map),
+		client:                 cmndr,
+		globalDisabledTriggers: new(sync.Map),
+		globalEnabledTriggers:  new(sync.Map),
+		globalTriggersCache:    cache.New(cache.NoExpiration, time.Second*10),
 	}
 
 	return c
@@ -25,10 +34,7 @@ func newClient(cmndr commander) Client {
 
 // AddAction registers an action for this id
 func (c Client) AddAction(id string, action string) error {
-	if v, ok := c.triggers.Load(id); ok {
-		trgr := v.(*trigger)
-		trgr.ProcessDisableAction(action)
-	}
+	c.updateGlobalTrigger(id, action)
 	return c.client.AddAction(id, action)
 }
 
@@ -44,23 +50,34 @@ func (c Client) GetLastAction(id string) (LastAction, error) {
 
 // SetTrigger sets the state tracking on the client by id,
 // per enableAction action, which can be disable via disableAction
-func (c Client) SetTrigger(id string, enableAction string, disableAction string) {
-	t, _ := c.triggers.LoadOrStore(id, &trigger{})
-	trgr := t.(*trigger)
-	trgr.Set(enableAction, disableAction)
-	c.triggers.Store(id, trgr)
+func (c Client) SetTrigger(enableAction string, disableAction string, lifetime time.Duration) {
+	c.globalDisabledTriggers.Store(disableAction, enableAction)
+	c.globalEnabledTriggers.Store(enableAction, lifetime)
 }
 
 // TriggerStatus checks the action "Is it blocked by a trigger?"
 // If blocked, then returns True.
 // To unlock the required to be added the disableAction.
 func (c *Client) TriggerStatus(id string, action string) bool {
-	t, ok := c.triggers.Load(id)
+	_, ok := c.globalTriggersCache.Get(id + action)
+	return ok
+}
+
+func (c *Client) updateGlobalTrigger(id, action string) {
+	e, ok := c.globalDisabledTriggers.Load(action)
 	if ok {
-		trgr := t.(*trigger)
-		_, ok = trgr.enableActionList.Load(action)
-		return ok
+		enaction := e.(string)
+		if _, ok := c.globalTriggersCache.Get(id + enaction); ok {
+			if lifetime, ok := c.globalEnabledTriggers.Load(enaction); ok {
+				c.globalTriggersCache.Set(id+enaction, nil, lifetime.(time.Duration))
+			}
+		}
+		return
 	}
 
-	return false
+	_, ok = c.globalEnabledTriggers.Load(action)
+	if ok {
+		c.globalTriggersCache.Set(id+action, nil, cache.NoExpiration)
+		return
+	}
 }
