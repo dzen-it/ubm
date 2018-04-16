@@ -67,17 +67,25 @@ func (c *Client) updateGlobalTrigger(id, action string) {
 	e, ok := c.globalDisabledTriggers.Load(action)
 	if ok {
 		enaction := e.(string)
-		if _, ok := c.globalTriggersCache.Get(id + enaction); ok {
-			if lifetime, ok := c.globalEnabledTriggers.Load(enaction); ok {
-				c.globalTriggersCache.Set(id+enaction, nil, lifetime.(time.Duration))
-			}
+		isRestored, ok := c.globalTriggersCache.Get(id + enaction)
+		if !ok {
+			return
 		}
+
+		if isRestored.(bool) {
+			return
+		}
+
+		if lifetime, ok := c.globalEnabledTriggers.Load(enaction); ok {
+			c.globalTriggersCache.Set(id+enaction, true, lifetime.(time.Duration))
+		}
+
 		return
 	}
 
 	_, ok = c.globalEnabledTriggers.Load(action)
 	if ok {
-		c.globalTriggersCache.Set(id+action, nil, cache.NoExpiration)
+		c.globalTriggersCache.Set(id+action, false, cache.NoExpiration)
 		return
 	}
 }
