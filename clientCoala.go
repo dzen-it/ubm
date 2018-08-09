@@ -6,12 +6,10 @@ import (
 	"net"
 
 	"github.com/coalalib/coalago"
-	m "github.com/coalalib/coalago/message"
 )
 
 type clientCoala struct {
-	coala *coalago.Coala
-	host  net.Addr
+	host net.Addr
 }
 
 // NewClientCoala returns the Client for Coala protocol
@@ -22,8 +20,7 @@ func NewClientCoala(host string) Client {
 	}
 
 	c := newClient(clientCoala{
-		coala: coalago.NewListen(0),
-		host:  addr,
+		host: addr,
 	})
 
 	return c
@@ -31,14 +28,17 @@ func NewClientCoala(host string) Client {
 
 func (c clientCoala) AddAction(id string, action string) error {
 	message := newCoalaMessageAddAction(id, action)
-	_, err := c.coala.Send(message, c.host)
+
+	client := coalago.NewClient()
+	_, err := client.Send(message, c.host.String())
 	return err
 }
 
 func (c clientCoala) GetAction(id string, action string) (Action, error) {
 	a := Action{}
 	message := newCoalaMessageGetAction(id, action)
-	resp, err := c.coala.Send(message, c.host)
+	client := coalago.NewClient()
+	resp, err := client.Send(message, c.host.String())
 	if err != nil {
 		return a, err
 	}
@@ -47,14 +47,15 @@ func (c clientCoala) GetAction(id string, action string) (Action, error) {
 		return a, err
 	}
 
-	err = json.Unmarshal(resp.Payload.Bytes(), &a)
+	err = json.Unmarshal(resp.Body, &a)
 	return a, err
 }
 
 func (c clientCoala) GetLastAction(id string) (LastAction, error) {
 	la := LastAction{}
 	message := newCoalaMessageGetLastAction(id)
-	resp, err := c.coala.Send(message, c.host)
+	client := coalago.NewClient()
+	resp, err := client.Send(message, c.host.String())
 	if err != nil {
 		return la, err
 	}
@@ -63,12 +64,12 @@ func (c clientCoala) GetLastAction(id string) (LastAction, error) {
 		return la, err
 	}
 
-	err = json.Unmarshal(resp.Payload.Bytes(), &la)
+	err = json.Unmarshal(resp.Body, &la)
 	return la, err
 }
 
-func newCoalaMessageAddAction(id, action string) *m.CoAPMessage {
-	message := m.NewCoAPMessage(m.NON, m.POST)
+func newCoalaMessageAddAction(id, action string) *coalago.CoAPMessage {
+	message := coalago.NewCoAPMessage(coalago.NON, coalago.POST)
 	message.SetURIPath(coalaPathActions)
 	message.SetURIQuery("id", id)
 	message.SetURIQuery("action", action)
@@ -76,8 +77,8 @@ func newCoalaMessageAddAction(id, action string) *m.CoAPMessage {
 	return message
 }
 
-func newCoalaMessageGetAction(id, action string) *m.CoAPMessage {
-	message := m.NewCoAPMessage(m.CON, m.GET)
+func newCoalaMessageGetAction(id, action string) *coalago.CoAPMessage {
+	message := coalago.NewCoAPMessage(coalago.CON, coalago.GET)
 	message.SetURIPath(coalaPathActions)
 	message.SetURIQuery("id", id)
 	message.SetURIQuery("action", action)
@@ -85,18 +86,18 @@ func newCoalaMessageGetAction(id, action string) *m.CoAPMessage {
 	return message
 }
 
-func newCoalaMessageGetLastAction(id string) *m.CoAPMessage {
-	message := m.NewCoAPMessage(m.CON, m.GET)
+func newCoalaMessageGetLastAction(id string) *coalago.CoAPMessage {
+	message := coalago.NewCoAPMessage(coalago.CON, coalago.GET)
 	message.SetURIPath(coalaPathActionsLast)
 	message.SetURIQuery("id", id)
 	message.SetSchemeCOAPS()
 	return message
 }
 
-func errFromResponse(message *m.CoAPMessage) error {
-	if message.Code < m.CoapCodeBadRequest {
+func errFromResponse(resp *coalago.Response) error {
+	if resp.Code < coalago.CoapCodeBadRequest {
 		return nil
 	}
 
-	return fmt.Errorf("%s", message.Payload.String())
+	return fmt.Errorf("%s", resp.Body)
 }

@@ -4,8 +4,6 @@ import (
 	"fmt"
 
 	"github.com/coalalib/coalago"
-	m "github.com/coalalib/coalago/message"
-	"github.com/coalalib/coalago/resource"
 )
 
 const (
@@ -15,17 +13,12 @@ const (
 )
 
 type transportCoala struct {
-	coala *coalago.Coala
+	addr   string
+	server *coalago.Server
 }
 
-func (t transportCoala) Serve() (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("%v", r)
-		}
-	}()
-
-	select {}
+func (t transportCoala) Serve() error {
+	return t.server.Listen(t.addr)
 }
 
 // NewServerCoala returns implementation of Listener interface for Coala protocol
@@ -34,14 +27,15 @@ func NewServerCoala(port int, db DB) Server {
 		db: db,
 	}
 
-	coala := coalago.NewListen(port)
+	server := coalago.NewServer()
 
-	coala.AddPOSTResource(coalaPathActions, h.handlerPostAction)
-	coala.AddGETResource(coalaPathActions, h.handlerGetAction)
-	coala.AddGETResource(coalaPathActionsLast, h.handlerGetLastAction)
+	server.AddPOSTResource(coalaPathActions, h.handlerPostAction)
+	server.AddGETResource(coalaPathActions, h.handlerGetAction)
+	server.AddGETResource(coalaPathActionsLast, h.handlerGetLastAction)
 
 	t := transportCoala{
-		coala: coala,
+		server: server,
+		addr:   fmt.Sprintf(":%d", port),
 	}
 
 	return t
@@ -51,54 +45,54 @@ type coalaBaseHandler struct {
 	db DB
 }
 
-func (c *coalaBaseHandler) handlerPostAction(message *m.CoAPMessage) *resource.CoAPResourceHandlerResult {
+func (c *coalaBaseHandler) handlerPostAction(message *coalago.CoAPMessage) *coalago.CoAPResourceHandlerResult {
 	id := message.GetURIQuery("id")
 	action := message.GetURIQuery("action")
 
 	if len(id) == 0 || len(action) == 0 {
-		return resource.NewResponse(m.NewStringPayload("invalid queries"), m.CoapCodeBadRequest)
+		return coalago.NewResponse(coalago.NewStringPayload("invalid queries"), coalago.CoapCodeBadRequest)
 	}
 
 	if err := c.db.AddAction(id, action); err != nil {
-		return resource.NewResponse(m.NewStringPayload("internal error"), m.CoapCodeInternalServerError)
+		return coalago.NewResponse(coalago.NewStringPayload("internal error"), coalago.CoapCodeInternalServerError)
 	}
 
-	return resource.NewResponse(m.NewEmptyPayload(), m.CoapCodeChanged)
+	return coalago.NewResponse(coalago.NewEmptyPayload(), coalago.CoapCodeChanged)
 }
 
-func (c *coalaBaseHandler) handlerGetAction(message *m.CoAPMessage) *resource.CoAPResourceHandlerResult {
+func (c *coalaBaseHandler) handlerGetAction(message *coalago.CoAPMessage) *coalago.CoAPResourceHandlerResult {
 	id := message.GetURIQuery("id")
 	action := message.GetURIQuery("action")
 
 	if len(id) == 0 || len(action) == 0 {
-		return resource.NewResponse(m.NewStringPayload("invalid queries"), m.CoapCodeBadRequest)
+		return coalago.NewResponse(coalago.NewStringPayload("invalid queries"), coalago.CoapCodeBadRequest)
 	}
 
 	a, err := c.db.GetAction(id, action)
 	if err != nil {
 		if err == ErrActionNotFound {
-			return resource.NewResponse(m.NewStringPayload(err.Error()), m.CoapCodeBadRequest)
+			return coalago.NewResponse(coalago.NewStringPayload(err.Error()), coalago.CoapCodeBadRequest)
 		}
-		return resource.NewResponse(m.NewStringPayload("internal error: "+err.Error()), m.CoapCodeInternalServerError)
+		return coalago.NewResponse(coalago.NewStringPayload("internal error: "+err.Error()), coalago.CoapCodeInternalServerError)
 	}
 
-	return resource.NewResponse(m.NewJSONPayload(a), m.CoapCodeContent)
+	return coalago.NewResponse(coalago.NewJSONPayload(a), coalago.CoapCodeContent)
 }
 
-func (c *coalaBaseHandler) handlerGetLastAction(message *m.CoAPMessage) *resource.CoAPResourceHandlerResult {
+func (c *coalaBaseHandler) handlerGetLastAction(message *coalago.CoAPMessage) *coalago.CoAPResourceHandlerResult {
 	id := message.GetURIQuery("id")
 
 	if len(id) == 0 {
-		return resource.NewResponse(m.NewStringPayload("invalid queries"), m.CoapCodeBadRequest)
+		return coalago.NewResponse(coalago.NewStringPayload("invalid queries"), coalago.CoapCodeBadRequest)
 	}
 
 	la, err := c.db.GetLastAction(id)
 	if err != nil {
 		if err == ErrUserNotFound {
-			return resource.NewResponse(m.NewStringPayload(err.Error()), m.CoapCodeBadRequest)
+			return coalago.NewResponse(coalago.NewStringPayload(err.Error()), coalago.CoapCodeBadRequest)
 		}
-		return resource.NewResponse(m.NewStringPayload("internal error"), m.CoapCodeInternalServerError)
+		return coalago.NewResponse(coalago.NewStringPayload("internal error"), coalago.CoapCodeInternalServerError)
 	}
 
-	return resource.NewResponse(m.NewJSONPayload(la), m.CoapCodeContent)
+	return coalago.NewResponse(coalago.NewJSONPayload(la), coalago.CoapCodeContent)
 }
